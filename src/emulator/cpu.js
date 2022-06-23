@@ -152,7 +152,7 @@ export class InstructionDefinition {
 export function instruction(opcode, mnemonic, addressing, cycles, bytes, description) {
     return function (target, name, descriptor) {
         console.log(arguments)
-        if(!target.instructionsTable) {
+        if (!target.instructionsTable) {
             target.instructionsTable = {};
         }
         target.instructionsTable[opcode] = new InstructionDefinition(opcode, mnemonic, addressing, cycles, bytes, descriptor.value);
@@ -175,7 +175,7 @@ export class MOS6502CPU {
         this.memory = memory;
         this.clock = clock;
         this.clock.schedule(() => this.step());
-        
+
         this.stats = {
             totalCycles: 0,
             totalInstructions: 0,
@@ -209,10 +209,10 @@ export class MOS6502CPU {
 
     getStats() {
         const totalTime = this.stats.lastStepTime - this.stats.startTime;
-        
+
         return {
             ...this.stats,
-            cpuFrequency: (this.stats.totalCycles/totalTime)*1000,
+            cpuFrequency: (this.stats.totalCycles / totalTime) * 1000,
         }
     }
 
@@ -309,12 +309,90 @@ export class MOS6502CPU {
     @instruction(0x61, 'ADC', 'indirect,Y', 5, 2, 'Add with carry: A <- A + M + C')
     adc_indirect_y(idf) {
         const zp_address = this.memory.get(this.PC + 1);
-        let address = this.memory.get(zp_address) | this.memory.get(zp_address+1) << 8;
+        let address = this.memory.get(zp_address) | this.memory.get(zp_address + 1) << 8;
         address += this.registers[R.Y];
         const operand = this.memory.get(address);
         this._adc(operand, 2);
     }
 
+    _and(operand, bytes) {
+        const result = this.registers[R.A] & operand;
+
+        // Negative flag
+        if (result & 0x80) {
+            this.registers[R.P] |= M.NEG_SET;
+        } else {
+            this.registers[R.P] &= M.NEG_CLR;
+        }
+
+        // Zero flag
+        if (result === 0) {
+            this.registers[R.P] |= M.ZERO_SET;
+        } else {
+            this.registers[R.P] &= M.ZERO_CLR;
+        }
+
+        this.registers[R.A] = result & 0xFF;
+
+        this.PC = (this.PC + bytes) % this.memory.size;
+    }
+
+    @instruction(0x29, 'AND', 'immediate', 2, 2, 'AND with accumulator: A <- A & M')
+    and_immediate(idf) {
+        const operand = this.memory.get((this.PC + 1) % this.memory.size);
+        this._and(operand);
+    }
+
+    @instruction(0x25, 'AND', 'zeropage', 3, 2, 'AND with accumulator: A <- A & M')
+    and_zeropage(idf) {
+        const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
+        const operand = this.memory.get(zp_address);
+        this._and(operand);
+    }
+
+    @instruction(0x35, 'AND', 'zeropage,X', 4, 2, 'AND with accumulator: A <- A & M')
+    and_zeropage_x(idf) {
+        const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
+        const operand = this.memory.get((zp_address + this.registers[R.X]) & 0xFF);
+        this._and(operand);
+    }
+
+    @instruction(0x2D, 'AND', 'absolute', 4, 3, 'AND with accumulator: A <- A & M')
+    and_absolute(idf) {
+        const address = this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8);
+        const operand = this.memory.get(address);
+        this._and(operand, 3);
+    }
+
+    @instruction(0x3D, 'AND', 'absolute,X', 4, 3, 'AND with accumulator: A <- A & M')
+    and_absolute_x(idf) {
+        const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.X];
+        const operand = this.memory.get(address);
+        this._and(operand, 3);
+    }
+
+    @instruction(0x39, 'AND', 'absolute,Y', 4, 3, 'AND with accumulator: A <- A & M')
+    and_absolute_y(idf) {
+        const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.Y];
+        const operand = this.memory.get(address);
+        this._and(operand, 3);
+    }
+
+    @instruction(0x21, 'AND', 'indirect,X', 6, 2, 'AND with accumulator: A <- A & M')
+    and_indirect_x(idf) {
+        const address = (this.memory.get(this.PC + 1) + this.registers[R.X]) & 0xFF;
+        const operand = this.memory.get(address);
+        this._and(operand, 2);
+    }
+
+    @instruction(0x31, 'AND', 'indirect,Y', 5, 2, 'AND with accumulator: A <- A & M')
+    and_indirect_y(idf) {
+        const zp_address = this.memory.get(this.PC + 1);
+        let address = this.memory.get(zp_address) | this.memory.get(zp_address + 1) << 8;
+        address += this.registers[R.Y];
+        const operand = this.memory.get(address);
+        this._and(operand, 2);
+    }
 
     @instruction(0x4C, 'JMP', 'absolute', 4, 3, 'Jump to New Location (absolute).')
     jmp() {
