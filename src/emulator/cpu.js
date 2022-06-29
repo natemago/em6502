@@ -149,19 +149,21 @@ export class InstructionDefinition {
     }
 }
 
-export function instruction(opcode, mnemonic, addressing, cycles, bytes, description) {
-    return function (target, name, descriptor) {
-        console.log(arguments)
-        if (!target.instructionsTable) {
-            target.instructionsTable = {};
-        }
-        target.instructionsTable[opcode] = new InstructionDefinition(opcode, mnemonic, addressing, cycles, bytes, descriptor.value);
+export const INSTRUCTION_SET_6502 = {};
+
+function instruction(opcode, mnemonic, addressing, cycles, bytes, description, exec) {
+
+    if (INSTRUCTION_SET_6502[opcode]) {
+        throw new Error(`Opcode ${opcode.toString(16)} already defined as: ${INSTRUCTION_SET_6502[opcode].toString()}`);
     }
+    INSTRUCTION_SET_6502[opcode] = new InstructionDefinition(opcode, mnemonic, addressing, cycles, bytes, exec);
+
+    return exec;
 }
 
 export class MOS6502CPU {
 
-    static instructionsTable = {};
+    instructionsTable = INSTRUCTION_SET_6502;
 
     constructor(memory, clock) {
         this.registers = new Int8Array([
@@ -190,7 +192,7 @@ export class MOS6502CPU {
         const instructionDef = this.instructionsTable[opcode];
         if (!instructionDef) {
             this.coreDump();
-            throw new Error(`Invalid opcode: ${opcode}.`);
+            throw new Error(`Invalid opcode: ${opcode.toString(16)}.`);
         }
         instructionDef.exec.call(this, instructionDef);
         this.stats.totalCycles += instructionDef.cycles;
@@ -258,62 +260,56 @@ export class MOS6502CPU {
         this.PC = (this.PC + bytes) % this.memory.size;
     }
 
-    @instruction(0x69, 'ADC', 'immediate', 2, 2, 'Add with carry: A <- A + M + C')
-    adc_immediate(idf) {
-        const operand = this.memory.get((this.PC + 1) % this.memory.size);
-        this._adc(operand);
-    }
+    adc_immediate = instruction(0x69, 'ADC', 'immediate', 2, 2, 'Add with carry: A <- A + M + C',
+        function (idf) {
+            const operand = this.memory.get((this.PC + 1) % this.memory.size);
+            this._adc(operand);
+        })
 
-    @instruction(0x65, 'ADC', 'zeropage', 3, 2, 'Add with carry: A <- A + M + C')
-    adc_zeropage(idf) {
+    
+    adc_zeropage = instruction(0x65, 'ADC', 'zeropage', 3, 2, 'Add with carry: A <- A + M + C', function(idf) {
         const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
         const operand = this.memory.get(zp_address);
         this._adc(operand);
-    }
+    })
 
-    @instruction(0x75, 'ADC', 'zeropage,X', 4, 2, 'Add with carry: A <- A + M + C')
-    adc_zeropage_x(idf) {
+    adc_zeropage_x = instruction(0x75, 'ADC', 'zeropage,X', 4, 2, 'Add with carry: A <- A + M + C', function(idf) {
         const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
         const operand = this.memory.get((zp_address + this.registers[R.X]) & 0xFF);
         this._adc(operand);
-    }
+    })
 
-    @instruction(0x6D, 'ADC', 'absolute', 4, 3, 'Add with carry: A <- A + M + C')
-    adc_absolute(idf) {
+    adc_absolute = instruction(0x6D, 'ADC', 'absolute', 4, 3, 'Add with carry: A <- A + M + C', function(idf) {
         const address = this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8);
         const operand = this.memory.get(address);
         this._adc(operand, 3);
-    }
+    })
 
-    @instruction(0x7D, 'ADC', 'absolute,X', 4, 3, 'Add with carry: A <- A + M + C')
-    adc_absolute_x(idf) {
+    adc_absolute_x = instruction(0x7D, 'ADC', 'absolute,X', 4, 3, 'Add with carry: A <- A + M + C', function(idf) {
         const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.X];
         const operand = this.memory.get(address);
         this._adc(operand, 3);
-    }
+    })
 
-    @instruction(0x79, 'ADC', 'absolute,Y', 4, 3, 'Add with carry: A <- A + M + C')
-    adc_absolute_y(idf) {
+    adc_absolute_y = instruction(0x79, 'ADC', 'absolute,Y', 4, 3, 'Add with carry: A <- A + M + C', function(idf) {
         const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.Y];
         const operand = this.memory.get(address);
         this._adc(operand, 3);
-    }
+    })
 
-    @instruction(0x61, 'ADC', 'indirect,X', 6, 2, 'Add with carry: A <- A + M + C')
-    adc_indirect_x(idf) {
+    adc_indirect_x = instruction(0x61, 'ADC', 'indirect,X', 6, 2, 'Add with carry: A <- A + M + C', function(idf) {
         const address = (this.memory.get(this.PC + 1) + this.registers[R.X]) & 0xFF;
         const operand = this.memory.get(address);
         this._adc(operand, 2);
-    }
+    })
 
-    @instruction(0x61, 'ADC', 'indirect,Y', 5, 2, 'Add with carry: A <- A + M + C')
-    adc_indirect_y(idf) {
+    adc_indirect_y = instruction(0x71, 'ADC', 'indirect,Y', 5, 2, 'Add with carry: A <- A + M + C', function(idf) {
         const zp_address = this.memory.get(this.PC + 1);
         let address = this.memory.get(zp_address) | this.memory.get(zp_address + 1) << 8;
         address += this.registers[R.Y];
         const operand = this.memory.get(address);
         this._adc(operand, 2);
-    }
+    })
 
     _and(operand, bytes) {
         const result = this.registers[R.A] & operand;
@@ -337,69 +333,86 @@ export class MOS6502CPU {
         this.PC = (this.PC + bytes) % this.memory.size;
     }
 
-    @instruction(0x29, 'AND', 'immediate', 2, 2, 'AND with accumulator: A <- A & M')
-    and_immediate(idf) {
+    and_immediate = instruction(0x29, 'AND', 'immediate', 2, 2, 'AND with accumulator: A <- A & M', function(idf) {
         const operand = this.memory.get((this.PC + 1) % this.memory.size);
         this._and(operand);
-    }
+    })
 
-    @instruction(0x25, 'AND', 'zeropage', 3, 2, 'AND with accumulator: A <- A & M')
-    and_zeropage(idf) {
+    and_zeropage = instruction(0x25, 'AND', 'zeropage', 3, 2, 'AND with accumulator: A <- A & M', function(idf) {
         const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
         const operand = this.memory.get(zp_address);
         this._and(operand);
-    }
+    })
 
-    @instruction(0x35, 'AND', 'zeropage,X', 4, 2, 'AND with accumulator: A <- A & M')
-    and_zeropage_x(idf) {
+    and_zeropage_x = instruction(0x35, 'AND', 'zeropage,X', 4, 2, 'AND with accumulator: A <- A & M', function(idf) {
         const zp_address = this.memory.get((this.PC + 1) % this.memory.size);
         const operand = this.memory.get((zp_address + this.registers[R.X]) & 0xFF);
         this._and(operand);
-    }
+    })
 
-    @instruction(0x2D, 'AND', 'absolute', 4, 3, 'AND with accumulator: A <- A & M')
-    and_absolute(idf) {
+    and_absolute = instruction(0x2D, 'AND', 'absolute', 4, 3, 'AND with accumulator: A <- A & M', function(idf) {
         const address = this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8);
         const operand = this.memory.get(address);
         this._and(operand, 3);
-    }
+    })
 
-    @instruction(0x3D, 'AND', 'absolute,X', 4, 3, 'AND with accumulator: A <- A & M')
-    and_absolute_x(idf) {
+    and_absolute_x = instruction(0x3D, 'AND', 'absolute,X', 4, 3, 'AND with accumulator: A <- A & M', function(idf) {
         const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.X];
         const operand = this.memory.get(address);
         this._and(operand, 3);
-    }
+    })
 
-    @instruction(0x39, 'AND', 'absolute,Y', 4, 3, 'AND with accumulator: A <- A & M')
-    and_absolute_y(idf) {
+    and_absolute_y = instruction(0x39, 'AND', 'absolute,Y', 4, 3, 'AND with accumulator: A <- A & M', function(idf) {
         const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.Y];
         const operand = this.memory.get(address);
         this._and(operand, 3);
-    }
+    })
 
-    @instruction(0x21, 'AND', 'indirect,X', 6, 2, 'AND with accumulator: A <- A & M')
-    and_indirect_x(idf) {
+    and_indirect_x = instruction(0x21, 'AND', 'indirect,X', 6, 2, 'AND with accumulator: A <- A & M', function(idf) {
         const address = (this.memory.get(this.PC + 1) + this.registers[R.X]) & 0xFF;
         const operand = this.memory.get(address);
         this._and(operand, 2);
-    }
+    })
 
-    @instruction(0x31, 'AND', 'indirect,Y', 5, 2, 'AND with accumulator: A <- A & M')
-    and_indirect_y(idf) {
+    and_indirect_y = instruction(0x31, 'AND', 'indirect,Y', 5, 2, 'AND with accumulator: A <- A & M', function(idf) {
         const zp_address = this.memory.get(this.PC + 1);
         let address = this.memory.get(zp_address) | this.memory.get(zp_address + 1) << 8;
         address += this.registers[R.Y];
         const operand = this.memory.get(address);
         this._and(operand, 2);
+    })
+
+    _asl(operand, bytes) {
+        const result = (this.registers[R.A] << 1) & 0xFF;
+
+        if (!result) {
+            this.registers[R.P] |= M.ZERO_SET;
+        } else {
+            this.registers[R.P] &= M.ZERO_CLR;
+        }
+
+        if (this.registers[R.A] & M.SIGN_MASK) {
+            this.registers[R.P] |= M.CARRY_SET;
+        } else {
+            this.registers[R.P] &= M.CARY_CLR;
+        }
+
+        if (result & M.SIGN_MASK) {
+            this.registers[R.P] |= M.NEG_SET;
+        } else {
+            this.registers[R.P] &= M.NEG_CLR;
+        }
+
+        this.registers[R.A] = result;
+
+        this.PC += bytes;
     }
 
-    @instruction(0x4C, 'JMP', 'absolute', 4, 3, 'Jump to New Location (absolute).')
-    jmp() {
+    jmp = instruction(0x4C, 'JMP', 'absolute', 4, 3, 'Jump to New Location (absolute).', function() {
         const pcl = this.memory.get((this.PC + 1) % this.memory.size);
         const pch = this.memory.get((this.PC + 2) % this.memory.size);
 
         this.PC = (pch << 8) + pcl;
-    }
+    })
 
 }
