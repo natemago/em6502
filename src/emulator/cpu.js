@@ -383,7 +383,7 @@ export class MOS6502CPU {
     })
 
     _asl(operand, bytes) {
-        const result = (this.registers[R.A] << 1) & 0xFF;
+        const result = operand << 1
 
         if (!result) {
             this.registers[R.P] |= M.ZERO_SET;
@@ -391,7 +391,7 @@ export class MOS6502CPU {
             this.registers[R.P] &= M.ZERO_CLR;
         }
 
-        if (this.registers[R.A] & M.SIGN_MASK) {
+        if (result & M.SIGN_MASK) {
             this.registers[R.P] |= M.CARRY_SET;
         } else {
             this.registers[R.P] &= M.CARY_CLR;
@@ -403,10 +403,40 @@ export class MOS6502CPU {
             this.registers[R.P] &= M.NEG_CLR;
         }
 
-        this.registers[R.A] = result;
-
         this.PC += bytes;
+
+        return result & 0xFF;
     }
+
+    asl_accumulator = instruction(0x0A, 'ASL', 'accumulator', 2, 1, 'Arithmetic shift left', function(idf) {
+        const result = this._asl(this.registers[R.A], 1);
+        this.registers[R.A] = result;
+    })
+
+    asl_zeropage = instruction(0x06, 'ASL', 'zeropage', 5, 2, 'Arithmetic shift left', function(idf) {
+        const zpAddress = this.memory.get(this.PC + 1) & 0xFF;
+        const result = this._asl(this.memory.get(zpAddress), 2);
+        this.memory.set(zpAddress, result);
+    })
+
+    asl_zeropage_x = instruction(0x16, 'ASL', 'zeropage', 6, 2, 'Arithmetic shift left', function(idf) {
+        const zpAddress = this.memory.get(this.PC + 1) & 0xFF;
+        const actualAddress = (zpAddress + this.registers[R.X]) & 0xFF;
+        const result = this._asl(this.memory.get(actualAddress), 2);
+        this.memory.set(actualAddress, result);
+    })
+
+    asl_absolute = instruction(0x0E, 'ASL', 'zeropage', 6, 3, 'Arithmetic shift left', function(idf) {
+        const address = this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8);
+        const result = this._asl(this.memory.get(address), 3);
+        this.memory.set(address, result);
+    })
+
+    asl_absolute_x = instruction(0x1E, 'ASL', 'zeropage', 6, 3, 'Arithmetic shift left', function(idf) {
+        const address = (this.memory.get(this.PC + 1) | (this.memory.get(this.PC + 2) << 8)) + this.registers[R.X];
+        const result = this._asl(this.memory.get(address), 3);
+        this.memory.set(address, result);
+    })
 
     jmp = instruction(0x4C, 'JMP', 'absolute', 4, 3, 'Jump to New Location (absolute).', function() {
         const pcl = this.memory.get((this.PC + 1) % this.memory.size);
