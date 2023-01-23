@@ -1,11 +1,12 @@
 export class AsmToken {
-    constructor(type, value, lineNumber) {
+    constructor(type, value, lineNumber, line) {
         this.type = type;
         this.value = value;
         this.lineNumber = lineNumber;
+        this.line = line;
     }
 }
-
+``
 export function tokenize(source) {
     if (!source || !source.length) {
         return [];
@@ -59,6 +60,13 @@ export function tokenize(source) {
             tokens: [],
             block: '',
         });
+}
+
+export function lines(source) {
+    if (!source || !source.length) {
+        return [];
+    }
+    return source.split(/\r?\n/);
 }
 
 export function parse(tokens, instructionsTable) {

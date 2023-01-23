@@ -12,7 +12,7 @@ const clock = new Clock(1000*1000, 40);
 const cpu = new MOS6502CPU(memory, clock);
 
 window.cpu = cpu;
-cpu.execute();
+//cpu.execute();
 
 const intId = setInterval(() => {
     const {actualFrequency, usage, frames, frameDuration, startTime, currTime} = clock.getStats();
